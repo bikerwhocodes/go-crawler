@@ -3,42 +3,28 @@ package main
 import (
 	"fmt"
 	"net/url"
-	"sync"
 	"time"
 )
 
-// Meets the minimum specs
-// Please see the README for more information
-
-var crawled = make(map[string]bool)
-
-//var crawledMutex sync.RWMutex
-var final sync.WaitGroup
-var host = ""
-
 func main() {
-	jobs := make(chan string)
+	jobs := make(chan string, 32)
 	results := make(chan string)
 
-	start := input()
+	start, host := input()
+	jobs <- start
+
+	fmt.Printf("Crawling %s\n", start)
 
 	now := time.Now()
-	go func() {
-		jobs <- start
-	}()
 
 	var w worker = workerStruct{
 		jobs:    jobs,
 		results: results,
+		baseurl: host,
+		crawled: make(map[string]bool),
 	}
 
-	var wg sync.WaitGroup
-	w.init(&wg)
-
-	go func() {
-		defer close(jobs)
-		final.Wait()
-	}()
+	go w.init()
 
 	for r := range results {
 		fmt.Println(r)
@@ -47,9 +33,9 @@ func main() {
 	fmt.Println("All done in ", time.Since(now))
 }
 
-func input() string {
+func input() (string, string) {
 	var start string
-	fmt.Print("Enter a starting URL (eg. https://nihalpandit.com) : ")
+	fmt.Print("Enter a starting URL (eg. https://tredish.com) : ")
 	_, err := fmt.Scanln(&start)
 	if err != nil {
 		panic(err)
@@ -60,7 +46,5 @@ func input() string {
 		panic(err)
 	}
 
-	host = URI.Host
-
-	return start
+	return start, URI.Host
 }

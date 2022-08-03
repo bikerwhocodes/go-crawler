@@ -20,7 +20,6 @@ func (worker workerStruct) crawl(weblink string) {
 		return
 	}
 	processPage(resp.Body, worker)
-	return
 }
 
 // NOTE: not my function, Modified from: https://vorozhko.net/get-all-links-from-html-page-with-go-lang
@@ -34,17 +33,14 @@ func processPage(body io.Reader, worker workerStruct) {
 			return
 		case html.StartTagToken, html.EndTagToken:
 			token := z.Token()
-			if "a" == token.Data {
+			if token.Data == "a" {
 				for _, attr := range token.Attr {
 					if attr.Key == "href" {
 						link := normalize(attr.Val)
 						uri, err := url.Parse(link)
-						if err == nil && strings.Contains(uri.Host, host) && uri.Scheme != "mailto" && uri.Scheme != "tel" {
-							if !crawled[link] {
-								crawled[link] = true
-								worker.enqueue(link)
-								worker.result(link)
-							}
+						if err == nil && strings.Contains(uri.Host, worker.baseurl) && uri.Scheme != "mailto" && uri.Scheme != "tel" {
+							// queue the job
+							worker.jobs <- link
 						}
 					}
 				}
@@ -54,21 +50,14 @@ func processPage(body io.Reader, worker workerStruct) {
 }
 
 func normalize(link string) string {
-	suffix := "/"
+	suffix := "//"
+	if strings.HasPrefix(link, suffix) {
+		link = strings.Trim(link, suffix)
+		link = "https://" + link
+	}
+	suffix = "/"
 	if strings.HasSuffix(link, suffix) {
 		link = link[:len(link)-len(suffix)]
 	}
 	return link
 }
-
-//func read(index string) bool {
-//	crawledMutex.RLock()
-//	defer crawledMutex.RUnlock()
-//	return crawled[index]
-//}
-//
-//func write(index string) {
-//	crawledMutex.Lock()
-//	defer crawledMutex.Unlock()
-//	crawled[index] = true
-//}
