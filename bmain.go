@@ -2,18 +2,25 @@ package main
 
 import (
 	"fmt"
+	"github.com/aws/aws-lambda-go/lambda"
 	"net/url"
 	"time"
 )
 
+type lambdaInput struct {
+	Start string `json:"start"`
+}
+
 func main() {
+	lambda.Start(crawler)
+}
+
+func crawler(event lambdaInput) (string, error) {
 	jobs := make(chan string, 32)
 	results := make(chan string)
 
-	start, host := input()
+	start, host := inputLambda(event.Start)
 	jobs <- start
-
-	fmt.Printf("Crawling %s\n", start)
 
 	now := time.Now()
 
@@ -30,7 +37,7 @@ func main() {
 		fmt.Println(r)
 	}
 
-	fmt.Println("All done in ", time.Since(now))
+	return fmt.Sprintf("All done in %s", time.Since(now)), nil
 }
 
 func input() (string, string) {
@@ -41,6 +48,15 @@ func input() (string, string) {
 		panic(err)
 	}
 
+	URI, err := url.Parse(start)
+	if err != nil || URI.Scheme == "mailto" || URI.Scheme == "tel" {
+		panic(err)
+	}
+
+	return start, URI.Host
+}
+
+func inputLambda(start string) (string, string) {
 	URI, err := url.Parse(start)
 	if err != nil || URI.Scheme == "mailto" || URI.Scheme == "tel" {
 		panic(err)
