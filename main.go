@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"net/url"
+	"sort"
 	"time"
 )
 
@@ -72,6 +73,8 @@ func crawler(start string) (string, []string, error) {
 	for r := range results {
 		sites = append(sites, r)
 	}
+
+	sort.Strings(sites)
 
 	return time.Since(now).String(), sites, nil
 }
