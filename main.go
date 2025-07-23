@@ -1,55 +1,87 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
 	"net/url"
-	"sync"
+	"sort"
 	"time"
 )
 
-// Meets the minimum specs
-// Please see the README for more information
+type lambdaInput struct {
+	Start string `json:"start"`
+}
 
-var crawled = make(map[string]bool)
+type Response events.APIGatewayProxyResponse
 
-//var crawledMutex sync.RWMutex
-var final sync.WaitGroup
-var host = ""
+func Handler(req events.APIGatewayProxyRequest) (Response, error) {
+	var buf bytes.Buffer
+
+	start := req.QueryStringParameters["start"]
+	timeTaken, sites, err := crawler(start)
+	if err != nil {
+		return Response{StatusCode: 500}, err
+	}
+	body, err := json.Marshal(map[string]interface{}{
+		"urlsCrawled": sites,
+		"timeTaken":   timeTaken,
+	})
+	if err != nil {
+		return Response{StatusCode: 404}, err
+	}
+	json.HTMLEscape(&buf, body)
+
+	resp := Response{
+		StatusCode:      200,
+		IsBase64Encoded: false,
+		Body:            buf.String(),
+		Headers: map[string]string{
+			"Content-Type":           "application/json",
+			"X-MyCompany-Func-Reply": "hello-handler",
+		},
+	}
+
+	return resp, nil
+}
 
 func main() {
-	jobs := make(chan string)
+	lambda.Start(Handler)
+}
+
+func crawler(start string) (string, []string, error) {
+	jobs := make(chan string, 32)
 	results := make(chan string)
 
-	start := input()
+	start, host := inputLambda(start)
+	jobs <- start
 
 	now := time.Now()
-	go func() {
-		jobs <- start
-	}()
 
 	var w worker = workerStruct{
 		jobs:    jobs,
 		results: results,
+		baseurl: host,
+		crawled: make(map[string]bool),
 	}
 
-	var wg sync.WaitGroup
-	w.init(&wg)
+	go w.init()
 
-	go func() {
-		defer close(jobs)
-		final.Wait()
-	}()
-
+	sites := []string{}
 	for r := range results {
-		fmt.Println(r)
+		sites = append(sites, r)
 	}
 
-	fmt.Println("All done in ", time.Since(now))
+	sort.Strings(sites)
+
+	return time.Since(now).String(), sites, nil
 }
 
-func input() string {
+func input() (string, string) {
 	var start string
-	fmt.Print("Enter a starting URL (eg. https://nihalpandit.com) : ")
+	fmt.Print("Enter a starting URL (eg. https://tredish.com) : ")
 	_, err := fmt.Scanln(&start)
 	if err != nil {
 		panic(err)
@@ -60,7 +92,14 @@ func input() string {
 		panic(err)
 	}
 
-	host = URI.Host
+	return start, URI.Host
+}
 
-	return start
+func inputLambda(start string) (string, string) {
+	URI, err := url.Parse(start)
+	if err != nil || URI.Scheme == "mailto" || URI.Scheme == "tel" {
+		panic(err)
+	}
+
+	return start, URI.Host
 }

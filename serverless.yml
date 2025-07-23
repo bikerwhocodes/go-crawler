@@ -1,0 +1,21 @@
+service: go-crawler
+frameworkVersion: '2'
+
+provider:
+  name: aws
+  runtime: go1.x
+
+package:
+  exclude:
+    - ./**
+  include:
+    - ./bin/**
+
+functions:
+  crawler:
+    handler: bin/main
+    timeout: 120
+    events:
+      - http:
+          path: crawl
+          method: get
